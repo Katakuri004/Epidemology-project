@@ -1,5 +1,7 @@
 import argparse
+import json
 import os
+import time
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
@@ -8,6 +10,15 @@ from src.data.build_graph import build_normalized_graph, build_norm_from_coords
 from src.models.gnn_lstm import GNNLSTM
 from src.data.dataset import TimeSeriesWindowDataset
 from src.utils.config import load_config, set_global_seed
+
+
+def _git_sha() -> str:
+    try:
+        import subprocess
+
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
+    except Exception:
+        return "unknown"
 
 
 def main() -> None:
@@ -120,7 +131,14 @@ def main() -> None:
             header = ",".join([str(n) for n in names])
         np.savetxt(os.path.join(logs_dir, "per_country_mae.csv"), per_country_mae.reshape(1, -1), delimiter=",", fmt="%.6f", header=header or "", comments="")
         np.savetxt(os.path.join(logs_dir, "per_country_rmse.csv"), per_country_rmse.reshape(1, -1), delimiter=",", fmt="%.6f", header=header or "", comments="")
-        print({"pred_shape": (len(test_ds), num_nodes, horizon), "horizon": horizon, "nodes": num_nodes, "mae": round(mae, 6), "rmse": round(rmse, 6)})
+        result = {"pred_shape": (len(test_ds), num_nodes, horizon), "horizon": horizon, "nodes": num_nodes, "mae": round(mae, 6), "rmse": round(rmse, 6)}
+        print(result)
+        # Write aggregate to runs/
+        runs_dir = os.path.join("runs", time.strftime("%Y%m%d-%H%M%S"))
+        os.makedirs(runs_dir, exist_ok=True)
+        metrics = {"seed": int(seed), "git_sha": _git_sha(), **result}
+        with open(os.path.join(runs_dir, "eval_metrics.json"), "w", encoding="utf-8") as f:
+            json.dump(metrics, f, indent=2)
     else:
         x = torch.randn(8, lookback, num_nodes, features)
         with torch.no_grad():

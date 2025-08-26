@@ -1,5 +1,7 @@
 import argparse
+import json
 import os
+import time
 from typing import Tuple
 
 import numpy as np
@@ -11,6 +13,15 @@ from src.data.build_graph import build_normalized_graph, build_norm_from_coords
 from src.models.gnn_lstm import GNNLSTM
 from src.data.dataset import TimeSeriesWindowDataset
 from src.utils.config import load_config, resolve_path, set_global_seed
+
+
+def _git_sha() -> str:
+    try:
+        import subprocess
+
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
+    except Exception:
+        return "unknown"
 
 
 def synthetic_data(num_nodes: int, lookback: int, features: int, steps: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -93,6 +104,7 @@ def main() -> None:
         patience = cfg.training.get("early_stopping_patience", 3)
         best_val = float("inf")
         stale = 0
+        returns = []
         for _ in range(epochs):
             model.train()
             running = 0.0
@@ -131,6 +143,7 @@ def main() -> None:
             os.makedirs(logs_dir, exist_ok=True)
             with open(os.path.join(logs_dir, "predictor_metrics.csv"), "a", encoding="utf-8") as f:
                 f.write(f"{train_loss},{val_loss}\n")
+            returns.append(val_loss)
             # Early stopping
             if val_loss + 1e-9 < best_val:
                 best_val = val_loss
@@ -171,6 +184,18 @@ def main() -> None:
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     torch.save(model.state_dict(), args.out)
     print(f"Saved predictor to {args.out}")
+
+    # Write metrics under runs/
+    runs_dir = os.path.join("runs", time.strftime("%Y%m%d-%H%M%S"))
+    os.makedirs(runs_dir, exist_ok=True)
+    metrics = {
+        "seed": int(seed),
+        "git_sha": _git_sha(),
+        "epochs": int(cfg.training.get("epochs", 5)),
+        "best_val_mse": float(best_val) if 'best_val' in locals() else None,
+    }
+    with open(os.path.join(runs_dir, "predictor_metrics.json"), "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
 
 
 if __name__ == "__main__":

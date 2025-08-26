@@ -1,12 +1,14 @@
 import argparse
+import json
 import os
-from collections import deque
-from typing import Deque, Tuple
+import time
+from collections import deque, Counter
+from typing import Deque, Tuple, Dict, Any
 
 import numpy as np
 import torch
 
-from src.envs.epi_env import EpiEnvConfig, SimpleEpiEnv
+from src.envs.epi_env import EpiEnvConfig, SimpleEpiEnv, PredictorEnvConfig, PredictorEpiEnv
 from src.models.agent import DQNAgent, DQNConfig
 from src.utils.config import load_config, set_global_seed
 
@@ -23,10 +25,20 @@ def sample_batch(buffer: Deque[Tuple[np.ndarray, int, float, np.ndarray, float]]
     )
 
 
+def _git_sha() -> str:
+    try:
+        import subprocess
+
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
+    except Exception:
+        return "unknown"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train RL agent")
     parser.add_argument("--config", type=str, default="configs/base.yaml")
     parser.add_argument("--out", type=str, default="models/rl_agent_q_network.pth")
+    parser.add_argument("--use_predictor_env", action="store_true", help="Use frozen predictor as environment")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -36,7 +48,26 @@ def main() -> None:
     state_dim = cfg.rl.get("state_dim", 16)
     num_actions = cfg.rl.get("num_actions", 4)
 
-    env = SimpleEpiEnv(EpiEnvConfig(num_nodes=cfg.model.get("num_nodes", 10), state_dim=state_dim, num_actions=num_actions, seed=seed))
+    if args.use_predictor_env:
+        series_path = cfg.dataset.get("series_file", "data/processed/series.npy")
+        env = PredictorEpiEnv(PredictorEnvConfig(
+            series_path=series_path,
+            weights_path=cfg.training.get("predictor_weights", "models/gnn_lstm_model.pth"),
+            lookback=cfg.model.get("lookback", 14),
+            horizon=cfg.model.get("forecast_horizon", 7),
+            state_dim=state_dim,
+            num_actions=num_actions,
+            seed=seed,
+            alpha_cases=cfg.rl.get("alpha_cases", 1.0),
+            beta_npi=cfg.rl.get("beta_npi", 0.1),
+            action_costs=cfg.rl.get("action_costs", [0.0, 1.0, 2.0, 3.0]),
+            graph_mode=cfg.graph.get("mode", "distance_threshold"),
+            radius_km=float(cfg.graph.get("radius_km", 800.0)),
+            knn_k=int(cfg.graph.get("knn_k", 8)),
+        ))
+    else:
+        env = SimpleEpiEnv(EpiEnvConfig(num_nodes=cfg.model.get("num_nodes", 10), state_dim=state_dim, num_actions=num_actions, seed=seed))
+
     agent = DQNAgent(DQNConfig(state_dim=state_dim, num_actions=num_actions, lr=cfg.rl.get("lr", 1e-3)))
 
     buffer: Deque[Tuple[np.ndarray, int, float, np.ndarray, float]] = deque(maxlen=10000)
@@ -45,22 +76,45 @@ def main() -> None:
     batch_size = cfg.rl.get("batch_size", 32)
     epsilon = cfg.rl.get("epsilon", 0.1)
 
+    returns = []
+    action_counts: Counter = Counter()
+    start_time = time.time()
     for _ in range(episodes):
         s = env.reset()
+        ep_ret = 0.0
         for _ in range(steps_per_ep):
             a = agent.act(s, epsilon=epsilon)
-            ns, r, done, _ = env.step(a)
+            ns, r, done, info = env.step(a)
             buffer.append((s, a, r, ns, float(done)))
             s = ns
+            ep_ret += float(r)
+            action_counts[a] += 1
             if len(buffer) >= 8:
                 batch = sample_batch(buffer, batch_size)
                 agent.update(batch)
             if done:
                 break
+        returns.append(ep_ret)
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     torch.save(agent.q.state_dict(), args.out)
     print(f"Saved RL agent to {args.out}")
+
+    # Write metrics under runs/
+    runs_dir = os.path.join("runs", time.strftime("%Y%m%d-%H%M%S"))
+    os.makedirs(runs_dir, exist_ok=True)
+    metrics: Dict[str, Any] = {
+        "seed": int(seed),
+        "git_sha": _git_sha(),
+        "episodes": int(episodes),
+        "steps_per_episode": int(steps_per_ep),
+        "mean_return": float(np.mean(returns)) if returns else 0.0,
+        "std_return": float(np.std(returns)) if returns else 0.0,
+        "action_histogram": {int(k): int(v) for k, v in sorted(action_counts.items())},
+    }
+    with open(os.path.join(runs_dir, "rl_metrics.json"), "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
+    print(metrics)
 
 
 if __name__ == "__main__":

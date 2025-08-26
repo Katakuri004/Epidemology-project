@@ -13,6 +13,9 @@ eval:
 prepare:
 	python prepare_data.py --config configs/base.yaml | cat
 
+e2e:
+	$(MAKE) prepare && $(MAKE) train && $(MAKE) rl && $(MAKE) eval
+
 test:
 	pytest -q | cat
 
