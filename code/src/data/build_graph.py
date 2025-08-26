@@ -54,12 +54,18 @@ def adjacency_from_distance_threshold(coords: np.ndarray, radius_km: float) -> n
     return A
 
 
-def adjacency_from_knn(coords: np.ndarray, k: int) -> np.ndarray:
+def adjacency_from_knn(coords: np.ndarray, k: int, seed: Optional[int] = None) -> np.ndarray:
     """Symmetric k-NN adjacency by distance."""
     lat = coords[:, 0]
     lon = coords[:, 1]
     D = _haversine_km(lat, lon, lat, lon)
     np.fill_diagonal(D, np.inf)
+    # Deterministic tie-breaker via tiny jitter controlled by seed
+    if seed is not None:
+        rng = np.random.default_rng(seed)
+        jitter = rng.normal(scale=1e-6, size=D.shape)
+        jitter[np.eye(D.shape[0], dtype=bool)] = 0.0
+        D = D + jitter
     N = coords.shape[0]
     A = np.zeros((N, N), dtype=np.float32)
     idx = np.argsort(D, axis=1)[:, :k]
@@ -70,11 +76,11 @@ def adjacency_from_knn(coords: np.ndarray, k: int) -> np.ndarray:
     return A
 
 
-def build_norm_from_coords(coords: np.ndarray, mode: str = "distance_threshold", radius_km: float = 1000.0, k: int = 5) -> Tuple[np.ndarray, np.ndarray]:
+def build_norm_from_coords(coords: np.ndarray, mode: str = "distance_threshold", radius_km: float = 1000.0, k: int = 5, seed: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
     if mode == "distance_threshold":
         A = adjacency_from_distance_threshold(coords, radius_km)
     elif mode == "knn":
-        A = adjacency_from_knn(coords, k)
+        A = adjacency_from_knn(coords, k, seed=seed)
     else:
         raise ValueError("mode must be 'distance_threshold' or 'knn'")
     return build_normalized_graph(A)

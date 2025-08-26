@@ -78,7 +78,7 @@ class PredictorEpiEnv:
             nodes_df = pd.read_csv(nodes_csv)
             if {"lat", "lon"}.issubset(nodes_df.columns):
                 coords = nodes_df[["lat", "lon"]].to_numpy(dtype=float)
-                _, norm = build_norm_from_coords(coords, mode=self.cfg.graph_mode, radius_km=self.cfg.radius_km, k=self.cfg.knn_k)
+                _, norm = build_norm_from_coords(coords, mode=self.cfg.graph_mode, radius_km=self.cfg.radius_km, k=self.cfg.knn_k, seed=self.cfg.seed)
             else:
                 _, norm = build_normalized_graph(np.eye(self.N, dtype=np.float32))
         else:

@@ -78,10 +78,17 @@ def main() -> None:
 
     returns = []
     action_counts: Counter = Counter()
+    comp_infect_means = []
+    comp_cost_means = []
+    switches_per_ep = []
     start_time = time.time()
     for _ in range(episodes):
         s = env.reset()
         ep_ret = 0.0
+        last_a = None
+        ep_switches = 0
+        infect_comp_accum = []
+        cost_comp_accum = []
         for _ in range(steps_per_ep):
             a = agent.act(s, epsilon=epsilon)
             ns, r, done, info = env.step(a)
@@ -89,12 +96,26 @@ def main() -> None:
             s = ns
             ep_ret += float(r)
             action_counts[a] += 1
+            if last_a is not None and a != last_a:
+                ep_switches += 1
+            last_a = a
+            # component logs if provided by env
+            if isinstance(info, dict):
+                if "mean_cases_eff" in info:
+                    infect_comp_accum.append(float(info["mean_cases_eff"]))
+                if "cost" in info:
+                    cost_comp_accum.append(float(info["cost"]))
             if len(buffer) >= 8:
                 batch = sample_batch(buffer, batch_size)
                 agent.update(batch)
             if done:
                 break
         returns.append(ep_ret)
+        switches_per_ep.append(ep_switches)
+        if infect_comp_accum:
+            comp_infect_means.append(float(np.mean(infect_comp_accum)))
+        if cost_comp_accum:
+            comp_cost_means.append(float(np.mean(cost_comp_accum)))
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     torch.save(agent.q.state_dict(), args.out)
@@ -111,6 +132,9 @@ def main() -> None:
         "mean_return": float(np.mean(returns)) if returns else 0.0,
         "std_return": float(np.std(returns)) if returns else 0.0,
         "action_histogram": {int(k): int(v) for k, v in sorted(action_counts.items())},
+        "mean_switches_per_episode": float(np.mean(switches_per_ep)) if switches_per_ep else 0.0,
+        "comp_mean_cases_eff_mean": float(np.mean(comp_infect_means)) if comp_infect_means else None,
+        "comp_cost_mean": float(np.mean(comp_cost_means)) if comp_cost_means else None,
     }
     with open(os.path.join(runs_dir, "rl_metrics.json"), "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
