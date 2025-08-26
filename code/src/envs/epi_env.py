@@ -6,6 +6,7 @@ import torch
 
 from src.models.gnn_lstm import GNNLSTM
 from src.data.build_graph import build_normalized_graph, build_norm_from_coords
+from src.data.dataset import TimeSeriesWindowDataset
 
 
 @dataclass
@@ -54,6 +55,11 @@ class PredictorEnvConfig:
     graph_mode: str = "distance_threshold"
     radius_km: float = 800.0
     knn_k: int = 8
+    hidden_gnn: int = 32
+    hidden_lstm: int = 64
+    add_log1p: bool = True
+    add_roll_7: bool = True
+    add_roll_14: bool = False
 
 
 class PredictorEpiEnv:
@@ -70,8 +76,23 @@ class PredictorEpiEnv:
         self.cfg = cfg
         self.rng = np.random.default_rng(cfg.seed)
 
-        series = np.load(cfg.series_path, mmap_mode="r")  # (T, N, F)
-        self.series = np.array(series, dtype=np.float32)
+        series_np = np.load(cfg.series_path, mmap_mode="r")  # (T, N, F_raw)
+        # Use the same augmentation as training via dataset helper to ensure feature dim matches
+        # Build a small dataset instance to get the augmented series and scalers
+        # We can use train split just to initialize
+        ds = TimeSeriesWindowDataset(
+            cfg.series_path,
+            cfg.lookback,
+            cfg.horizon,
+            split="train",
+            train_ratio=0.7,
+            val_ratio=0.15,
+            fit_scaler_on_train=True,
+            add_log1p=cfg.add_log1p,
+            add_roll_7=cfg.add_roll_7,
+            add_roll_14=cfg.add_roll_14,
+        )
+        self.series = ds.series.astype(np.float32)  # augmented (T, N, F_aug)
         self.T, self.N, self.F = self.series.shape
         nodes_csv = os.path.join(os.path.dirname(cfg.series_path), "nodes.csv")
         if os.path.exists(nodes_csv):
@@ -87,11 +108,13 @@ class PredictorEpiEnv:
 
         # Load frozen predictor
         features = self.F
+        hidden_gnn = int(getattr(cfg, "hidden_gnn", 32)) if hasattr(cfg, "hidden_gnn") else 32
+        hidden_lstm = int(getattr(cfg, "hidden_lstm", 64)) if hasattr(cfg, "hidden_lstm") else 64
         self.model = GNNLSTM(
             num_nodes=self.N,
             input_features=features,
-            hidden_gnn=32,
-            hidden_lstm=64,
+            hidden_gnn=hidden_gnn,
+            hidden_lstm=hidden_lstm,
             forecast_horizon=cfg.horizon,
         )
         sd = torch.load(cfg.weights_path, map_location="cpu")

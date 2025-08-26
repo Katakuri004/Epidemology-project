@@ -41,14 +41,11 @@ def main() -> None:
     set_global_seed(seed)
 
     lookback = cfg.model.get("lookback", 14)
-    # Infer input feature dimension from data if available
+    # Paths and flags
     series_path = cfg.dataset.get("series_file", "data/processed/series.npy")
-    if os.path.exists(series_path):
-        tmpf = np.load(series_path, mmap_mode="r")
-        inferred_features = tmpf.shape[2]
-        features = inferred_features
-    else:
-        features = cfg.model.get("features", 3)
+    add_log1p = cfg.model.get("add_log1p", True)
+    add_roll_7 = cfg.model.get("add_roll_7", True)
+    add_roll_14 = cfg.model.get("add_roll_14", False)
     hidden_gnn = cfg.model.get("hidden_gnn", 32)
     hidden_lstm = cfg.model.get("hidden_lstm", 64)
     horizon = cfg.model.get("forecast_horizon", 7)
@@ -82,18 +79,16 @@ def main() -> None:
             _, norm = build_normalized_graph(np.eye(num_nodes, dtype=np.float32))
         norm_t = torch.from_numpy(norm.astype(np.float32))
 
+        train_ds = TimeSeriesWindowDataset(series_path, lookback, horizon, split="train", train_ratio=train_ratio, val_ratio=val_ratio, fit_scaler_on_train=True, add_log1p=add_log1p, add_roll_7=add_roll_7, add_roll_14=add_roll_14)
+        val_ds = TimeSeriesWindowDataset(series_path, lookback, horizon, split="val", train_ratio=train_ratio, val_ratio=val_ratio, fit_scaler_on_train=True, add_log1p=add_log1p, add_roll_7=add_roll_7, add_roll_14=add_roll_14)
+        features_aug = train_ds.series.shape[2]
         model = GNNLSTM(
             num_nodes=num_nodes,
-            input_features=features,
+            input_features=features_aug,
             hidden_gnn=hidden_gnn,
             hidden_lstm=hidden_lstm,
             forecast_horizon=horizon,
         )
-        add_log1p = cfg.model.get("add_log1p", True)
-        add_roll_7 = cfg.model.get("add_roll_7", True)
-        add_roll_14 = cfg.model.get("add_roll_14", False)
-        train_ds = TimeSeriesWindowDataset(series_path, lookback, horizon, split="train", train_ratio=train_ratio, val_ratio=val_ratio, fit_scaler_on_train=True, add_log1p=add_log1p, add_roll_7=add_roll_7, add_roll_14=add_roll_14)
-        val_ds = TimeSeriesWindowDataset(series_path, lookback, horizon, split="val", train_ratio=train_ratio, val_ratio=val_ratio, fit_scaler_on_train=True, add_log1p=add_log1p, add_roll_7=add_roll_7, add_roll_14=add_roll_14)
         train_dl = DataLoader(train_ds, batch_size=bs, shuffle=True, num_workers=num_workers)
         val_dl = DataLoader(val_ds, batch_size=bs, shuffle=False, num_workers=num_workers)
 

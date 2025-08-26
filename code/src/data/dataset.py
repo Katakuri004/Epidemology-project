@@ -53,20 +53,26 @@ class TimeSeriesWindowDataset(Dataset):
         if add_log1p:
             aug.append(np.log1p(series[..., 0:1]))
         if add_roll_7:
-            r7 = np.convolve(np.ones(7, dtype=np.float32) / 7.0, np.ones(1, dtype=np.float32), mode='full')
-            # Efficient rolling via cumulative sum
+            # Rolling mean over window with same length T by padding the first (win-1) with the first valid value
             c = np.cumsum(series[..., 0], axis=0)
             pad = np.concatenate([np.zeros((1, c.shape[1]), dtype=np.float32), c], axis=0)
             win = 7
-            r = (pad[win:] - pad[:-win]) / float(win)
-            r = np.concatenate([r[:1]] + [r], axis=0) if r.shape[0] < series.shape[0] else r
+            r_valid = (pad[win:] - pad[:-win]) / float(win)  # shape (T, N) when including leading pad below
+            # Prepend the first valid value (broadcast) to keep length T
+            lead = np.repeat(r_valid[:1], repeats=(series.shape[0] - r_valid.shape[0]), axis=0) if r_valid.shape[0] < series.shape[0] else np.empty((0, r_valid.shape[1]), dtype=np.float32)
+            r = np.concatenate([lead, r_valid], axis=0)
+            if r.shape[0] > series.shape[0]:
+                r = r[-series.shape[0]:]
             aug.append(r[..., None])
         if add_roll_14:
             c = np.cumsum(series[..., 0], axis=0)
             pad = np.concatenate([np.zeros((1, c.shape[1]), dtype=np.float32), c], axis=0)
             win = 14
-            r = (pad[win:] - pad[:-win]) / float(win)
-            r = np.concatenate([r[:1]] + [r], axis=0) if r.shape[0] < series.shape[0] else r
+            r_valid = (pad[win:] - pad[:-win]) / float(win)
+            lead = np.repeat(r_valid[:1], repeats=(series.shape[0] - r_valid.shape[0]), axis=0) if r_valid.shape[0] < series.shape[0] else np.empty((0, r_valid.shape[1]), dtype=np.float32)
+            r = np.concatenate([lead, r_valid], axis=0)
+            if r.shape[0] > series.shape[0]:
+                r = r[-series.shape[0]:]
             aug.append(r[..., None])
         self.series = np.concatenate(aug, axis=-1).astype(np.float32)
 

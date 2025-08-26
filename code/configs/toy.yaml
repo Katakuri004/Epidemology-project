@@ -1,0 +1,46 @@
+dataset:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  nodes_file: data/nodes.csv
+  series_file: data/processed/series.npy
+  timesteps: 60
+  train_ratio: 0.7
+  val_ratio: 0.15
+
+graph:
+  type: contiguity
+  normalize: symmetric
+  mode: distance_threshold
+  radius_km: 800.0
+  knn_k: 4
+
+model:
+  num_nodes: 5
+  features: 3
+  lookback: 10
+  forecast_horizon: 3
+  hidden_gnn: 16
+  hidden_lstm: 32
+  add_log1p: true
+  add_roll_7: true
+  add_roll_14: false
+
+training:
+  seed: 123
+  lr: 0.001
+  epochs: 3
+  batch_size: 16
+  num_workers: 0
+  early_stopping_patience: 2
+
+rl:
+  state_dim: 8
+  num_actions: 4
+  lr: 0.001
+  episodes: 3
+  steps_per_episode: 40
+  batch_size: 32
+  epsilon: 0.1
+  alpha_cases: 1.0
+  beta_npi: 0.1
+  action_costs: [0.0, 1.0, 2.0, 3.0]

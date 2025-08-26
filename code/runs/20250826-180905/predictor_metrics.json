@@ -1,0 +1,6 @@
+{
+  "seed": 42,
+  "git_sha": "2edc7d6",
+  "epochs": 5,
+  "best_val_mse": 0.03611692413687706
+}

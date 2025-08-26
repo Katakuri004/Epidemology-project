@@ -33,13 +33,11 @@ def main() -> None:
 
     num_nodes = cfg.model.get("num_nodes", 10)
     lookback = cfg.model.get("lookback", 14)
-    # Infer feature dimension from data if present
+    # Infer feature dimension from dataset object (after augmentation) to avoid mismatch
     series_path = cfg.dataset.get("series_file", "data/processed/series.npy")
-    if os.path.exists(series_path):
-        tmpf = np.load(series_path, mmap_mode="r")
-        features = tmpf.shape[2]
-    else:
-        features = cfg.model.get("features", 3)
+    add_log1p = cfg.model.get("add_log1p", True)
+    add_roll_7 = cfg.model.get("add_roll_7", True)
+    add_roll_14 = cfg.model.get("add_roll_14", False)
     hidden_gnn = cfg.model.get("hidden_gnn", 32)
     hidden_lstm = cfg.model.get("hidden_lstm", 64)
     horizon = cfg.model.get("forecast_horizon", 7)
@@ -48,15 +46,7 @@ def main() -> None:
     _, norm = build_normalized_graph(adj)
     norm_t = torch.from_numpy(norm.astype(np.float32))
 
-    model = GNNLSTM(
-        num_nodes=num_nodes,
-        input_features=features,
-        hidden_gnn=hidden_gnn,
-        hidden_lstm=hidden_lstm,
-        forecast_horizon=horizon,
-    )
-    model.load_state_dict(torch.load(args.weights, map_location="cpu"))
-    model.eval()
+    # Will rebuild model after creating dataset to know augmented feature size
 
     # If processed data exists, compute MAE/RMSE for next-step prediction on test split
     # series_path defined above
@@ -79,6 +69,8 @@ def main() -> None:
         else:
             _, norm = build_normalized_graph(np.eye(num_nodes, dtype=np.float32))
         norm_t = torch.from_numpy(norm.astype(np.float32))
+        test_ds = TimeSeriesWindowDataset(series_path, lookback, horizon, split="test", train_ratio=train_ratio, val_ratio=val_ratio, add_log1p=add_log1p, add_roll_7=add_roll_7, add_roll_14=add_roll_14)
+        features = test_ds.series.shape[2]
         model = GNNLSTM(
             num_nodes=num_nodes,
             input_features=features,
@@ -88,12 +80,6 @@ def main() -> None:
         )
         model.load_state_dict(torch.load(args.weights, map_location="cpu"))
         model.eval()
-        test_ds = TimeSeriesWindowDataset(series_path, lookback, horizon, split="test", train_ratio=train_ratio, val_ratio=val_ratio)
-        # Use same feature augmentation flags as train
-        add_log1p = cfg.model.get("add_log1p", True)
-        add_roll_7 = cfg.model.get("add_roll_7", True)
-        add_roll_14 = cfg.model.get("add_roll_14", False)
-        test_ds = TimeSeriesWindowDataset(series_path, lookback, horizon, split="test", train_ratio=train_ratio, val_ratio=val_ratio, add_log1p=add_log1p, add_roll_7=add_roll_7, add_roll_14=add_roll_14)
         dl = DataLoader(test_ds, batch_size=64, shuffle=False)
         mae_sum = 0.0
         rmse_sum = 0.0
@@ -143,6 +129,14 @@ def main() -> None:
         with open(os.path.join(runs_dir, "eval_metrics.json"), "w", encoding="utf-8") as f:
             json.dump(metrics, f, indent=2)
     else:
+        features = cfg.model.get("features", 3)
+        model = GNNLSTM(
+            num_nodes=num_nodes,
+            input_features=features,
+            hidden_gnn=hidden_gnn,
+            hidden_lstm=hidden_lstm,
+            forecast_horizon=horizon,
+        )
         x = torch.randn(8, lookback, num_nodes, features)
         with torch.no_grad():
             pred = model(x, norm_t)

@@ -39,6 +39,7 @@ def main() -> None:
     parser.add_argument("--config", type=str, default="configs/base.yaml")
     parser.add_argument("--out", type=str, default="models/rl_agent_q_network.pth")
     parser.add_argument("--use_predictor_env", action="store_true", help="Use frozen predictor as environment")
+    parser.add_argument("--predictor_weights", type=str, default=None, help="Path to predictor weights when using predictor env")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -50,9 +51,10 @@ def main() -> None:
 
     if args.use_predictor_env:
         series_path = cfg.dataset.get("series_file", "data/processed/series.npy")
+        weights_path = args.predictor_weights or cfg.training.get("predictor_weights", "models/gnn_lstm_model.pth")
         env = PredictorEpiEnv(PredictorEnvConfig(
             series_path=series_path,
-            weights_path=cfg.training.get("predictor_weights", "models/gnn_lstm_model.pth"),
+            weights_path=weights_path,
             lookback=cfg.model.get("lookback", 14),
             horizon=cfg.model.get("forecast_horizon", 7),
             state_dim=state_dim,
@@ -64,6 +66,11 @@ def main() -> None:
             graph_mode=cfg.graph.get("mode", "distance_threshold"),
             radius_km=float(cfg.graph.get("radius_km", 800.0)),
             knn_k=int(cfg.graph.get("knn_k", 8)),
+            hidden_gnn=int(cfg.model.get("hidden_gnn", 32)),
+            hidden_lstm=int(cfg.model.get("hidden_lstm", 64)),
+            add_log1p=bool(cfg.model.get("add_log1p", True)),
+            add_roll_7=bool(cfg.model.get("add_roll_7", True)),
+            add_roll_14=bool(cfg.model.get("add_roll_14", False)),
         ))
     else:
         env = SimpleEpiEnv(EpiEnvConfig(num_nodes=cfg.model.get("num_nodes", 10), state_dim=state_dim, num_actions=num_actions, seed=seed))
