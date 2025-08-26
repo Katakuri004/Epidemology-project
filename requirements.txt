@@ -2,7 +2,13 @@ pandas
 numpy
 scikit-learn
 torch
-torch_geometric
 matplotlib
 joblib
 ipywidgets
+pytest
+pyyaml
+
+# Install PyTorch Geometric following official matrix to match your Torch/CUDA
+# For Torch 2.8.x CPU on Windows:
+#   pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+#   pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.8.0+cpu.html
