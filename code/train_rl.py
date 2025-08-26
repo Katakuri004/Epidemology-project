@@ -135,6 +135,8 @@ def main() -> None:
         "mean_switches_per_episode": float(np.mean(switches_per_ep)) if switches_per_ep else 0.0,
         "comp_mean_cases_eff_mean": float(np.mean(comp_infect_means)) if comp_infect_means else None,
         "comp_cost_mean": float(np.mean(comp_cost_means)) if comp_cost_means else None,
+        "alpha_cases": float(cfg.rl.get("alpha_cases", 1.0)),
+        "beta_npi": float(cfg.rl.get("beta_npi", 0.1)),
     }
     with open(os.path.join(runs_dir, "rl_metrics.json"), "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)

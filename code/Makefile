@@ -16,6 +16,12 @@ prepare:
 e2e:
 	$(MAKE) prepare && $(MAKE) train && $(MAKE) rl && $(MAKE) eval
 
+demo:
+	python prepare_data.py --config configs/toy.yaml | cat && \
+	python train_predictor.py --config configs/toy.yaml --out models/gnn_lstm_model.pth | cat && \
+	python train_rl.py --config configs/toy.yaml --out models/rl_agent_q_network.pth --use_predictor_env | cat && \
+	python eval.py --config configs/toy.yaml --weights models/gnn_lstm_model.pth | cat
+
 test:
 	pytest -q | cat
 

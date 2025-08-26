@@ -25,7 +25,7 @@ def main() -> None:
     nodes = pd.DataFrame({"node_id": np.arange(cfg.model.get("num_nodes", 10))})
     nodes.to_csv(Path(proc_dir) / "nodes.csv", index=False)
 
-    T = 100
+    T = int(cfg.dataset.get("timesteps", 100))
     features = cfg.model.get("features", 3)
     series = np.abs(np.random.randn(T, len(nodes), features)).astype(np.float32)
     scaler = MinMaxScaler()

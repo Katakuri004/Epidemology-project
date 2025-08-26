@@ -121,6 +121,9 @@ def main() -> None:
         rmse = (rmse_sum / max(1, count)) ** 0.5
         per_country_mae = per_country_abs_err_sum / np.maximum(per_country_count, 1.0)
         per_country_rmse = np.sqrt(per_country_sq_err_sum / np.maximum(per_country_count, 1.0))
+        # mean±sd per-node MAE
+        mae_mean = float(np.mean(per_country_mae))
+        mae_std = float(np.std(per_country_mae))
         # Save with header that aligns to nodes order
         nodes_csv = os.path.join(os.path.dirname(series_path), "nodes.csv")
         header = None
@@ -131,7 +134,7 @@ def main() -> None:
             header = ",".join([str(n) for n in names])
         np.savetxt(os.path.join(logs_dir, "per_country_mae.csv"), per_country_mae.reshape(1, -1), delimiter=",", fmt="%.6f", header=header or "", comments="")
         np.savetxt(os.path.join(logs_dir, "per_country_rmse.csv"), per_country_rmse.reshape(1, -1), delimiter=",", fmt="%.6f", header=header or "", comments="")
-        result = {"pred_shape": (len(test_ds), num_nodes, horizon), "horizon": horizon, "nodes": num_nodes, "mae": round(mae, 6), "rmse": round(rmse, 6)}
+        result = {"pred_shape": (len(test_ds), num_nodes, horizon), "horizon": horizon, "nodes": num_nodes, "mae": round(mae, 6), "rmse": round(rmse, 6), "mae_per_node_mean": round(mae_mean, 6), "mae_per_node_std": round(mae_std, 6)}
         print(result)
         # Write aggregate to runs/
         runs_dir = os.path.join("runs", time.strftime("%Y%m%d-%H%M%S"))
