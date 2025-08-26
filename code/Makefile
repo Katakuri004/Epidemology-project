@@ -22,6 +22,9 @@ demo:
 	python train_rl.py --config configs/toy.yaml --out models/rl_agent_q_network.pth --use_predictor_env | cat && \
 	python eval.py --config configs/toy.yaml --weights models/gnn_lstm_model.pth | cat
 
+explain:
+	python explain_demo.py --config configs/toy.yaml --predictor_weights models/gnn_lstm_model.pth --rl_weights models/rl_agent_q_network.pth
+
 test:
 	pytest -q | cat
 

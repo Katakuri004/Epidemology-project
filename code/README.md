@@ -33,6 +33,7 @@ pip install pyg-lib torch-scatter torch-sparse torch-cluster torch-spline-conv t
 - `train_predictor.py`: Trains GNN-LSTM predictor.
 - `train_rl.py`: Trains DQN agent on a minimal env.
 - `eval.py`: Loads predictor and reports output shapes.
+- `explain_demo.py`: Demonstrates model explainability features.
 
 Use `configs/base.yaml` to control paths, horizons, reward weights, and seeds.
 
@@ -54,7 +55,46 @@ make eval
 make e2e
 make test
 make demo  # quick toy run (5 nodes × 60 days)
+make explain  # demonstrate explainability features
 ```
+
+### Model Explainability (XAI)
+
+The project includes comprehensive explainability features for both the GNN-LSTM predictor and RL agent:
+
+#### GNN-LSTM Explainability
+- **Attention Analysis**: Visualize which neighboring regions influence predictions for a target region
+- **Feature Importance**: Identify which input features (cases, deaths, rolling means) matter most
+- **Temporal Attention**: Show which time steps the LSTM focuses on for predictions
+- **Neighbor Influence**: Quantify the impact of each neighboring region on predictions
+
+#### RL Agent Explainability
+- **Q-Value Analysis**: Compare Q-values across all possible actions
+- **State Importance**: Identify which state dimensions drive the agent's decisions
+- **Action Confidence**: Measure the agent's confidence in its chosen action
+- **SHAP-like Analysis**: Perturb state dimensions to understand their importance
+
+#### Usage
+```bash
+# Run the full pipeline first
+make demo
+
+# Then generate explanations
+make explain
+
+# Or run manually with custom parameters
+python explain_demo.py --config configs/toy.yaml \
+    --predictor_weights models/gnn_lstm_model.pth \
+    --rl_weights models/rl_agent_q_network.pth \
+    --target_node 0 --action 0 --save_dir explanations
+```
+
+The explainability module generates:
+- Interactive plots showing attention patterns and feature importance
+- JSON files with detailed explanation data
+- Summary statistics for model interpretability
+
+This makes the system suitable for policy applications where understanding model decisions is crucial.
 
 ### Configs
 
@@ -65,6 +105,7 @@ See `configs/base.yaml` for dataset paths, graph normalization, horizons, reward
 - Graph normalization check
 - Predictor forward shape
 - Deterministic DQN with fixed seed
+- Data preparation outputs and shapes
 
 Run: `pytest -q`.
 

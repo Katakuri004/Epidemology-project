@@ -1,0 +1,19 @@
+{
+  "seed": 123,
+  "git_sha": "ebf4525",
+  "episodes": 3,
+  "steps_per_episode": 40,
+  "mean_return": -11.242050019900006,
+  "std_return": 1.6020654663791138,
+  "action_histogram": {
+    "0": 89,
+    "1": 8,
+    "2": 13,
+    "3": 10
+  },
+  "mean_switches_per_episode": 8.0,
+  "comp_mean_cases_eff_mean": 0.22771791716416678,
+  "comp_cost_mean": 0.5333333333333333,
+  "alpha_cases": 1.0,
+  "beta_npi": 0.1
+}

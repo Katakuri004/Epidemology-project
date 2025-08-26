@@ -1,0 +1,15 @@
+{
+  "seed": 123,
+  "git_sha": "ebf4525",
+  "pred_shape": [
+    8,
+    5,
+    3
+  ],
+  "horizon": 3,
+  "nodes": 5,
+  "mae": 0.155845,
+  "rmse": 0.18014,
+  "mae_per_node_mean": 0.155845,
+  "mae_per_node_std": 0.029521
+}
