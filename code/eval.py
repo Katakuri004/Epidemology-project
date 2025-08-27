@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from src.data.build_graph import build_normalized_graph, build_norm_from_coords
-from src.models.gnn_lstm import GNNLSTM
+from src.models.gnn_lstm import GNNLSTM, LSTMOnly, GNNOnly
 from src.data.dataset import TimeSeriesWindowDataset
 from src.utils.config import load_config, set_global_seed
 
@@ -19,6 +19,40 @@ def _git_sha() -> str:
         return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
     except Exception:
         return "unknown"
+
+
+def _build_predictor(model_type: str, num_nodes: int, input_features: int, hidden_gnn: int, hidden_lstm: int, horizon: int):
+    mt = (model_type or "gnn_lstm").lower()
+    if mt == "lstm_only":
+        return LSTMOnly(num_nodes=num_nodes, input_features=input_features, hidden_lstm=hidden_lstm, forecast_horizon=horizon)
+    if mt == "gnn_only":
+        return GNNOnly(num_nodes=num_nodes, input_features=input_features, hidden_gnn=hidden_gnn, forecast_horizon=horizon)
+    return GNNLSTM(num_nodes=num_nodes, input_features=input_features, hidden_gnn=hidden_gnn, hidden_lstm=hidden_lstm, forecast_horizon=horizon)
+
+
+def _infer_dims_from_checkpoint(state_dict: dict) -> dict:
+    dims = {}
+    try:
+        if "gnn1.linear.weight" in state_dict:
+            w = state_dict["gnn1.linear.weight"]
+            dims["hidden_gnn"] = int(w.shape[0])
+            dims["features"] = int(w.shape[1])
+        if "lstm.weight_ih_l0" in state_dict:
+            wih = state_dict["lstm.weight_ih_l0"]
+            dims["hidden_lstm"] = int(wih.shape[0] // 4)
+        if "proj.weight" in state_dict:
+            pw = state_dict["proj.weight"]
+            dims["horizon"] = int(pw.shape[0])
+    except Exception:
+        pass
+    return dims
+
+def _choose_aug_flags_for_features(base_features: int, required_features: int) -> tuple[bool, bool, bool]:
+    extra = max(0, required_features - base_features)
+    add_log1p = extra >= 1
+    add_roll_7 = extra >= 2
+    add_roll_14 = extra >= 3
+    return add_log1p, add_roll_7, add_roll_14
 
 
 def main() -> None:
@@ -41,6 +75,7 @@ def main() -> None:
     hidden_gnn = cfg.model.get("hidden_gnn", 32)
     hidden_lstm = cfg.model.get("hidden_lstm", 64)
     horizon = cfg.model.get("forecast_horizon", 7)
+    model_type = cfg.model.get("type", "gnn_lstm")
 
     adj = np.eye(num_nodes, dtype=np.float32)
     _, norm = build_normalized_graph(adj)
@@ -69,16 +104,21 @@ def main() -> None:
         else:
             _, norm = build_normalized_graph(np.eye(num_nodes, dtype=np.float32))
         norm_t = torch.from_numpy(norm.astype(np.float32))
+        # Load checkpoint and infer dims; ensure dataset augmentation matches checkpoint features
+        state_dict = torch.load(args.weights, map_location="cpu")
+        inferred = _infer_dims_from_checkpoint(state_dict)
+        required_features = int(inferred.get("features", 0))
+        if required_features and required_features != (3 + int(add_log1p) + int(add_roll_7) + int(add_roll_14)):
+            base_features = 3
+            add_log1p, add_roll_7, add_roll_14 = _choose_aug_flags_for_features(base_features, required_features)
         test_ds = TimeSeriesWindowDataset(series_path, lookback, horizon, split="test", train_ratio=train_ratio, val_ratio=val_ratio, add_log1p=add_log1p, add_roll_7=add_roll_7, add_roll_14=add_roll_14)
         features = test_ds.series.shape[2]
-        model = GNNLSTM(
-            num_nodes=num_nodes,
-            input_features=features,
-            hidden_gnn=hidden_gnn,
-            hidden_lstm=hidden_lstm,
-            forecast_horizon=horizon,
-        )
-        model.load_state_dict(torch.load(args.weights, map_location="cpu"))
+        # Use inferred hidden sizes/horizon if available to avoid size mismatch
+        hidden_gnn = int(inferred.get("hidden_gnn", hidden_gnn))
+        hidden_lstm = int(inferred.get("hidden_lstm", hidden_lstm))
+        horizon = int(inferred.get("horizon", horizon))
+        model = _build_predictor(model_type, num_nodes, features, hidden_gnn, hidden_lstm, horizon)
+        model.load_state_dict(state_dict)
         model.eval()
         dl = DataLoader(test_ds, batch_size=64, shuffle=False)
         mae_sum = 0.0
@@ -120,7 +160,7 @@ def main() -> None:
             header = ",".join([str(n) for n in names])
         np.savetxt(os.path.join(logs_dir, "per_country_mae.csv"), per_country_mae.reshape(1, -1), delimiter=",", fmt="%.6f", header=header or "", comments="")
         np.savetxt(os.path.join(logs_dir, "per_country_rmse.csv"), per_country_rmse.reshape(1, -1), delimiter=",", fmt="%.6f", header=header or "", comments="")
-        result = {"pred_shape": (len(test_ds), num_nodes, horizon), "horizon": horizon, "nodes": num_nodes, "mae": round(mae, 6), "rmse": round(rmse, 6), "mae_per_node_mean": round(mae_mean, 6), "mae_per_node_std": round(mae_std, 6)}
+        result = {"pred_shape": (len(test_ds), num_nodes, horizon), "horizon": horizon, "nodes": num_nodes, "mae": round(mae, 6), "rmse": round(rmse, 6), "mae_per_node_mean": round(mae_mean, 6), "mae_per_node_std": round(mae_std, 6), "model_type": model_type}
         print(result)
         # Write aggregate to runs/
         runs_dir = os.path.join("runs", time.strftime("%Y%m%d-%H%M%S"))
@@ -130,17 +170,11 @@ def main() -> None:
             json.dump(metrics, f, indent=2)
     else:
         features = cfg.model.get("features", 3)
-        model = GNNLSTM(
-            num_nodes=num_nodes,
-            input_features=features,
-            hidden_gnn=hidden_gnn,
-            hidden_lstm=hidden_lstm,
-            forecast_horizon=horizon,
-        )
+        model = _build_predictor(model_type, num_nodes, features, hidden_gnn, hidden_lstm, horizon)
         x = torch.randn(8, lookback, num_nodes, features)
         with torch.no_grad():
             pred = model(x, norm_t)
-        print({"pred_shape": tuple(pred.shape), "horizon": horizon, "nodes": num_nodes})
+        print({"pred_shape": tuple(pred.shape), "horizon": horizon, "nodes": num_nodes, "model_type": model_type})
 
 
 if __name__ == "__main__":

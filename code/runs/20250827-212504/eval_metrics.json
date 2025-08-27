@@ -1,0 +1,16 @@
+{
+  "seed": 42,
+  "git_sha": "f6c4b2c",
+  "pred_shape": [
+    6,
+    5,
+    3
+  ],
+  "horizon": 3,
+  "nodes": 5,
+  "mae": 0.135859,
+  "rmse": 0.164929,
+  "mae_per_node_mean": 0.135859,
+  "mae_per_node_std": 0.032108,
+  "model_type": "gnn_lstm"
+}

@@ -49,7 +49,7 @@ class GNNLSTM(nn.Module):
         """
         x_seq: (batch, lookback, nodes, features)
         norm_adj: (nodes, nodes)
-        Returns: (batch, horizon, nodes)
+        Returns: (batch, nodes, horizon)
         """
         b, t, n, f = x_seq.shape
         assert n == self.num_nodes, "num_nodes mismatch"
@@ -65,6 +65,46 @@ class GNNLSTM(nn.Module):
         last = lstm_out[:, -1, :]  # (b*n, hidden_lstm)
         out = self.proj(last)  # (b*n, horizon)
         out = out.reshape(b, n, self.forecast_horizon)  # (b, n, horizon)
+        return out
+
+
+class LSTMOnly(nn.Module):
+    """Ablation: no graph, per-node LSTM on raw features with shared weights."""
+
+    def __init__(self, num_nodes: int, input_features: int, hidden_lstm: int, forecast_horizon: int) -> None:
+        super().__init__()
+        self.num_nodes = num_nodes
+        self.forecast_horizon = forecast_horizon
+        self.lstm = nn.LSTM(input_size=input_features, hidden_size=hidden_lstm, num_layers=1, batch_first=True)
+        self.proj = nn.Linear(hidden_lstm, forecast_horizon)
+
+    def forward(self, x_seq: torch.Tensor, norm_adj: torch.Tensor) -> torch.Tensor:
+        b, t, n, f = x_seq.shape
+        x_flat = x_seq.permute(0, 2, 1, 3).contiguous().reshape(b * n, t, f)
+        lstm_out, _ = self.lstm(x_flat)
+        last = lstm_out[:, -1, :]
+        out = self.proj(last).reshape(b, n, self.forecast_horizon)
+        return out
+
+
+class GNNOnly(nn.Module):
+    """Ablation: graph only, no temporal recurrence; average over time then project."""
+
+    def __init__(self, num_nodes: int, input_features: int, hidden_gnn: int, forecast_horizon: int) -> None:
+        super().__init__()
+        self.num_nodes = num_nodes
+        self.forecast_horizon = forecast_horizon
+        self.gnn1 = SimpleGNNLayer(input_features, hidden_gnn)
+        self.gnn2 = SimpleGNNLayer(hidden_gnn, hidden_gnn)
+        self.proj = nn.Linear(hidden_gnn, forecast_horizon)
+
+    def forward(self, x_seq: torch.Tensor, norm_adj: torch.Tensor) -> torch.Tensor:
+        b, t, n, f = x_seq.shape
+        x_g = x_seq.reshape(b * t, n, f)
+        x_g = torch.relu(self.gnn1(x_g, norm_adj))
+        x_g = torch.relu(self.gnn2(x_g, norm_adj))
+        x_g = x_g.reshape(b, t, n, -1).mean(dim=1)  # (b, n, hidden_gnn)
+        out = self.proj(x_g)  # (b, n, horizon)
         return out
 
 

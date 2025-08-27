@@ -1,0 +1,7 @@
+{
+  "seed": 123,
+  "git_sha": "f6c4b2c",
+  "epochs": 3,
+  "best_val_mse": 0.04196282476186752,
+  "model_type": "gnn_lstm"
+}

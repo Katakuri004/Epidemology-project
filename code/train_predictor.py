@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from src.data.build_graph import build_normalized_graph, build_norm_from_coords
-from src.models.gnn_lstm import GNNLSTM
+from src.models.gnn_lstm import GNNLSTM, LSTMOnly, GNNOnly
 from src.data.dataset import TimeSeriesWindowDataset
 from src.utils.config import load_config, resolve_path, set_global_seed
 
@@ -30,6 +30,15 @@ def synthetic_data(num_nodes: int, lookback: int, features: int, steps: int) -> 
     return x, y
 
 
+def build_predictor(model_type: str, num_nodes: int, input_features: int, hidden_gnn: int, hidden_lstm: int, horizon: int):
+    mt = (model_type or "gnn_lstm").lower()
+    if mt == "lstm_only":
+        return LSTMOnly(num_nodes=num_nodes, input_features=input_features, hidden_lstm=hidden_lstm, forecast_horizon=horizon)
+    if mt == "gnn_only":
+        return GNNOnly(num_nodes=num_nodes, input_features=input_features, hidden_gnn=hidden_gnn, forecast_horizon=horizon)
+    return GNNLSTM(num_nodes=num_nodes, input_features=input_features, hidden_gnn=hidden_gnn, hidden_lstm=hidden_lstm, forecast_horizon=horizon)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train GNN-LSTM predictor")
     parser.add_argument("--config", type=str, default="configs/base.yaml")
@@ -46,6 +55,7 @@ def main() -> None:
     add_log1p = cfg.model.get("add_log1p", True)
     add_roll_7 = cfg.model.get("add_roll_7", True)
     add_roll_14 = cfg.model.get("add_roll_14", False)
+    model_type = cfg.model.get("type", "gnn_lstm")
     hidden_gnn = cfg.model.get("hidden_gnn", 32)
     hidden_lstm = cfg.model.get("hidden_lstm", 64)
     horizon = cfg.model.get("forecast_horizon", 7)
@@ -79,18 +89,14 @@ def main() -> None:
             _, norm = build_normalized_graph(np.eye(num_nodes, dtype=np.float32))
         norm_t = torch.from_numpy(norm.astype(np.float32))
 
+        # Datasets first to get augmented feature count
         train_ds = TimeSeriesWindowDataset(series_path, lookback, horizon, split="train", train_ratio=train_ratio, val_ratio=val_ratio, fit_scaler_on_train=True, add_log1p=add_log1p, add_roll_7=add_roll_7, add_roll_14=add_roll_14)
         val_ds = TimeSeriesWindowDataset(series_path, lookback, horizon, split="val", train_ratio=train_ratio, val_ratio=val_ratio, fit_scaler_on_train=True, add_log1p=add_log1p, add_roll_7=add_roll_7, add_roll_14=add_roll_14)
-        features_aug = train_ds.series.shape[2]
-        model = GNNLSTM(
-            num_nodes=num_nodes,
-            input_features=features_aug,
-            hidden_gnn=hidden_gnn,
-            hidden_lstm=hidden_lstm,
-            forecast_horizon=horizon,
-        )
         train_dl = DataLoader(train_ds, batch_size=bs, shuffle=True, num_workers=num_workers)
         val_dl = DataLoader(val_ds, batch_size=bs, shuffle=False, num_workers=num_workers)
+
+        input_features = train_ds.series.shape[2]
+        model = build_predictor(model_type, num_nodes, input_features, hidden_gnn, hidden_lstm, horizon)
 
         opt = torch.optim.Adam(model.parameters(), lr=cfg.training.get("lr", 1e-3))
         loss_fn = nn.MSELoss()
@@ -99,17 +105,15 @@ def main() -> None:
         patience = cfg.training.get("early_stopping_patience", 3)
         best_val = float("inf")
         stale = 0
-        returns = []
         for _ in range(epochs):
             model.train()
             running = 0.0
             count = 0
             for xb, yb in train_dl:
-                # xb: (B, T, N, F), yb: (N, 1) per example → make batch (B, N)
                 xb = torch.nan_to_num(xb, nan=0.0, posinf=1.0, neginf=0.0)
                 pred = model(xb, norm_t)  # (B, N, horizon)
                 pred_first = pred[:, :, 0]
-                target = yb  # (B, N) after dataset fix
+                target = yb
                 loss = loss_fn(pred_first, target)
                 opt.zero_grad()
                 loss.backward()
@@ -124,22 +128,18 @@ def main() -> None:
             with torch.no_grad():
                 for xb, yb in val_dl:
                     xb = torch.nan_to_num(xb, nan=0.0, posinf=1.0, neginf=0.0)
-                    pred = model(xb, norm_t)  # (B, N, horizon)
+                    pred = model(xb, norm_t)
                     pred_first = pred[:, :, 0]
                     target = yb
                     loss = loss_fn(pred_first, target)
                     val_running += loss.item() * xb.size(0)
                     val_count += xb.size(0)
             val_loss = val_running / max(1, val_count)
-            # Log to console
             print({"train_mse": round(train_loss, 6), "val_mse": round(val_loss, 6)})
-            # Append to CSV under fixed repo path: <repo>/code/code/logs
             logs_dir = os.path.join(os.path.dirname(__file__), "code", "logs")
             os.makedirs(logs_dir, exist_ok=True)
             with open(os.path.join(logs_dir, "predictor_metrics.csv"), "a", encoding="utf-8") as f:
                 f.write(f"{train_loss},{val_loss}\n")
-            returns.append(val_loss)
-            # Early stopping
             if val_loss + 1e-9 < best_val:
                 best_val = val_loss
                 stale = 0
@@ -153,15 +153,10 @@ def main() -> None:
         _, norm = build_normalized_graph(adj)
         norm_t = torch.from_numpy(norm.astype(np.float32))
 
-        model = GNNLSTM(
-            num_nodes=num_nodes,
-            input_features=features,
-            hidden_gnn=hidden_gnn,
-            hidden_lstm=hidden_lstm,
-            forecast_horizon=horizon,
-        )
         # Fallback to synthetic data
-        x, y = synthetic_data(num_nodes, lookback, features, steps=64)
+        input_features = cfg.model.get("features", 3)
+        model = build_predictor(model_type, num_nodes, input_features, hidden_gnn, hidden_lstm, horizon)
+        x, y = synthetic_data(num_nodes, lookback, input_features, steps=64)
         x_t = torch.from_numpy(x)
         y_t = torch.from_numpy(y).squeeze(-1)
         opt = torch.optim.Adam(model.parameters(), lr=cfg.training.get("lr", 1e-3))
@@ -188,6 +183,7 @@ def main() -> None:
         "git_sha": _git_sha(),
         "epochs": int(cfg.training.get("epochs", 5)),
         "best_val_mse": float(best_val) if 'best_val' in locals() else None,
+        "model_type": model_type,
     }
     with open(os.path.join(runs_dir, "predictor_metrics.json"), "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)

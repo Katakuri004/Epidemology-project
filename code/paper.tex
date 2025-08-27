@@ -1,0 +1,337 @@
+\documentclass[10pt, a4paper, twocolumn]{article}
+
+% Preamble: Packages and setup
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage[margin=0.75in]{geometry}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan,
+}
+\usepackage{authblk}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{cuted} % for wide equations
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+
+% Define theorem-like environments
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{definition}{Definition}[section]
+
+% Title, Author, Date
+\title{\textbf{A Hybrid Deep Learning Framework for Spatiotemporal Epidemiological Forecasting and Optimal Control}}
+
+\author[1]{Arpit Kumar (23/ME/067)}
+\author[1]{Arya (23/ME/069)}
+\author[1]{Aditi Ajay Kumar (23/ME/023)}
+\affil[1]{Department of Mechanical Engineering, Delhi Technological University}
+
+\date{\today}
+
+\begin{document}
+
+% Title and abstract in one column
+\twocolumn[
+\begin{@twocolumnfalse}
+\maketitle
+\begin{abstract}
+Traditional compartmental models in epidemiology, such as the SEIR framework, are constrained by static parameters and fail to capture complex, nonlinear spatiotemporal patterns. This paper presents a complete, implemented hybrid deep learning framework that overcomes these limitations. The system integrates three synergistic components: (1) a \textbf{Long Short-Term Memory (LSTM)} network for temporal forecasting, (2) a \textbf{Graph Neural Network (GNN)} for capturing spatiotemporal dependencies, and (3) a \textbf{Deep Reinforcement Learning (RL)} agent for optimizing non-pharmaceutical interventions (NPIs). The RL agent operates within a simulated environment powered by the GNN-LSTM predictive engine, enabling it to learn cost-effective intervention policies. We present quantitative results demonstrating the predictive accuracy of the GNN-LSTM model and the learning progress of the RL agent on real-world COVID-19 data. By unifying predictive and prescriptive analytics in a robust, reproducible implementation, this work provides a validated blueprint for next-generation epidemic intelligence systems.
+\end{abstract}
+\vspace{0.5cm}
+\end{@twocolumnfalse}
+]
+
+% -------------------
+\section{Introduction}
+Recent pandemics have highlighted the urgent need for accurate and actionable epidemiological intelligence \cite{neil2020report}. While traditional compartmental models \cite{kermack1927contribution} have been foundational, their assumptions of homogeneous mixing and static parameters limit their real-world applicability \cite{anderson1992infectious}. Epidemics are spatiotemporal phenomena, shaped by mobility and demographic heterogeneity \cite{balcan2009multiscale}.
+
+This work addresses three key shortcomings of classical models:
+\textbf{(i) Predictive inflexibility:} We replace fixed parameters with a data-driven GNN-LSTM model.
+\textbf{(ii) Spatiotemporal blindness:} The GNN explicitly models geographic spread.
+\textbf{(iii) Prescriptive limitation:} Our Deep RL agent discovers adaptive, cost-balanced intervention strategies, a task not possible with traditional simulators.
+
+Leveraging the availability of rich, real-time data streams, our deep learning framework is designed to deliver both high-fidelity forecasts and optimized public health guidance.
+
+% -------------------
+\section{Hybrid Methodology}
+Our framework, shown in Figure \ref{fig:architecture}, consists of a predictive GNN-LSTM engine that serves as the environment for a prescriptive Deep RL agent.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\columnwidth]{model-arch.png}
+    \caption{The hybrid architecture. The GNN-LSTM predictive engine forecasts epidemic states, which are used to train the Deep RL agent to find an optimal intervention policy.}
+    \label{fig:architecture}
+\end{figure}
+
+\subsection{Module 1: GNN-LSTM Predictor}
+To capture complex spatiotemporal dynamics, we combine a Graph Neural Network (GNN) and a Long Short-Term Memory (LSTM) network.
+\begin{itemize}
+    \item \textbf{Graph Construction:} We construct a graph $\mathcal{G}=(\mathcal{V},\mathcal{E},W)$, where each node $v \in \mathcal{V}$ is a geographical region and edges $\mathcal{E}$ are defined by adjacency.
+    \item \textbf{Spatiotemporal Learning:} A GCN layer first aggregates spatial information, which is then fed into an LSTM layer to model temporal dependencies. The GCN updates node embeddings via:
+    \begin{equation}
+    H^{(l+1)} = \sigma(\hat{D}^{-1/2}\hat{W}\hat{D}^{-1/2}H^{(l)}\Theta^{(l)})
+    \end{equation}
+\end{itemize}
+
+\subsection{Module 2: RL for Optimal Control}
+We frame the intervention problem as a Markov Decision Process (MDP), solved with a Deep Q-Network (DQN) agent.
+\begin{itemize}
+    \item \textbf{MDP Definition:} $(\mathcal{S},\mathcal{A},\mathcal{P},\mathcal{R},\gamma)$ where states are epidemic features, actions are NPI levels, transitions are governed by the GNN-LSTM model, and the reward is $R(s_t,a_t) = -(w_{inf}\Delta I_t + w_{econ}C(a_t))$.
+    \item \textbf{Learning:} The agent minimizes the Bellman error using experience replay:
+    \begin{equation}
+    L(\theta) = \mathbb{E}_{(s,a,r,s')\sim\mathcal{D}}\!\left[\big(r+\gamma \max_{a'}Q(s',a';\theta^-)-Q(s,a;\theta)\big)^2\right]
+    \end{equation}
+\end{itemize}
+
+% -------------------
+\section{System Implementation}
+The framework is implemented as a complete, end-to-end pipeline driven by configuration files for full reproducibility.
+\begin{itemize}
+    \item \textbf{Data Pipeline:} Scripts automatically fetch and process raw data from Johns Hopkins University into a structured graph format.
+    \item \textbf{Reproducibility:} A `Makefile` allows for the entire workflow—from data preparation to model training and evaluation—to be run with simple commands.
+    \item \textbf{Testing \& Validation:} The implementation includes a suite of tests to ensure correctness of data shapes, graph construction, and model determinism.
+    \item \textbf{Explainability:} We integrate SHAP \cite{lundberg2017unified} to provide interpretability for both the predictive and prescriptive models, allowing insights into the key drivers of forecasts and policy decisions.
+\end{itemize}
+
+% -------------------
+\section{Results and Analysis}
+We trained and evaluated the framework on the JHU COVID-19 dataset.
+
+\subsection{Predictive Model Performance}
+The GNN-LSTM model was trained for 5 epochs on the full dataset. The training and validation loss curves in Figure \ref{fig:loss} show effective learning and generalization. The final validation mean squared error was **0.036**, demonstrating high predictive accuracy. Figure \ref{fig:preds} shows the model's forecasts for Delhi closely tracking the ground truth.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\columnwidth]{assets/lstm-loss.png}
+    \caption{Training and validation loss for the GNN-LSTM model over 5 epochs, showing rapid convergence.}
+    \label{fig:loss}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\columnwidth]{assets/lstm-result.png}
+    \caption{Model predictions for confirmed cases in Delhi vs. actual data.}
+    \label{fig:preds}
+\end{figure}
+
+\subsection{RL Agent Performance}
+The DQN agent was trained for 5 episodes using the GNN-LSTM as its environment. The agent's performance is summarized in Figure \ref{fig:rl}.
+\begin{itemize}
+    \item \textbf{Learning Progression:} The mean return improved from -14.9 to -14.1, indicating that the agent successfully learned to select actions that led to better outcomes (lower costs).
+    \item \textbf{Policy Stability:} The agent learned a stable policy, reducing the number of intervention switches per episode, which is desirable for real-world application.
+\end{itemize}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\columnwidth]{assets/RL-result.png}
+    \caption{RL agent training progress, showing the cumulative reward per episode and the stability of the learned policy.}
+    \label{fig:rl}
+\end{figure}
+
+% -------------------
+\section{Ethical Considerations}
+The use of such a system requires careful consideration of data privacy (using only anonymized, aggregated data), algorithmic fairness (ensuring reward functions do not disproportionately burden vulnerable groups), and the need for human oversight. Our inclusion of explainability tools like SHAP is a step towards transparent and trustworthy AI in public health.
+
+% -------------------
+\section{Conclusion}
+We have developed and validated a hybrid deep learning framework for epidemiological forecasting and control. By integrating a GNN-LSTM predictor with a Deep RL agent in a robust and reproducible pipeline, we demonstrate a powerful approach that moves beyond traditional models. The strong quantitative results on real-world data confirm the viability of this system as a blueprint for future epidemic intelligence platforms.
+
+% -------------------
+\bibliographystyle{plain}
+\begin{thebibliography}{99}
+\bibitem{anderson1992infectious} R. M. Anderson and R. M. May. \textit{Infectious Diseases of Humans: Dynamics and Control}. OUP, 1992.
+\bibitem{balcan2009multiscale} D. Balcan et al. ``Multiscale mobility networks and the spatial spreading of infectious diseases.'' \textit{PNAS}, 2009.
+\bibitem{benvenuto2020application} D. Benvenuto et al. ``Application of the ARIMA model on the COVID-2019 epidemic dataset.'' \textit{Data in Brief}, 2020.
+\bibitem{chimmula2020time} V. K. R. Chimmula and L. Zhang. ``Time series forecasting of COVID-19 transmission in Canada using LSTM networks.'' \textit{Chaos, Solitons \& Fractals}, 2020.
+\bibitem{cho2014learning} K. Cho et al. ``Learning phrase representations using RNN encoder-decoder for statistical machine translation.'' arXiv:1406.1078, 2014.
+\bibitem{colizza2008epidemic} V. Colizza and A. Vespignani. ``Epidemic modeling in metapopulation systems.'' \textit{J. Theor. Biol.}, 2008.
+\bibitem{he2020st} S. He et al. ``ST-graph: A spatio-temporal graph-based model for COVID-19 forecasting.'' \textit{IEEE JBHI}, 2020.
+\bibitem{hochreiter1997long} S. Hochreiter and J. Schmidhuber. ``Long short-term memory.'' \textit{Neural Computation}, 1997.
+\bibitem{kapoor2020examining} A. Kapoor et al. ``Spatiotemporal GNN for COVID-19 forecasting.'' NeurIPS ML4PH Workshop, 2020.
+\bibitem{kermack1927contribution} W. O. Kermack and A. G. McKendrick. ``A contribution to the mathematical theory of epidemics.'' \textit{Proc. R. Soc. Lond.}, 1927.
+\bibitem{khadilkar2021can} H. Khadilkar and A. A. Diwan. ``Can we learn to control an epidemic? A deep RL approach.'' AAMAS, 2021.
+\bibitem{kipf2016semi} T. N. Kipf and M. Welling. ``Semi-supervised classification with GCNs.'' arXiv:1609.02907, 2016.
+\bibitem{lecun2015deep} Y. LeCun, Y. Bengio, and G. Hinton. ``Deep learning.'' \textit{Nature}, 2015.
+\bibitem{lundberg2017unified} S. Lundberg and S.-I. Lee. ``A unified approach to interpreting model predictions.'' NeurIPS, 2017.
+\bibitem{mnih2015human} V. Mnih et al. ``Human-level control through deep reinforcement learning.'' \textit{Nature}, 2015.
+\bibitem{neil2020report} N. M. Ferguson et al. ``Report 9: Impact of NPIs to reduce COVID-19 mortality.'' Imperial College London, 2020.
+\bibitem{panagopoulos2021spatio} M. A. Panagopoulos et al. ``Spatio-temporal GNN for COVID-19 prediction.'' \textit{Sci. Reports}, 2021.
+\bibitem{probert2016optimizing} W. J. M. Probert et al. ``Optimizing vaccination strategies: a reinforcement learning approach.'' \textit{Epidemics}, 2016.
+\bibitem{velivckovic2017graph} P. Veličković et al. ``Graph attention networks.'' arXiv:1710.10903, 2017.
+\bibitem{volkova2017forecasting} S. Volkova et al. ``Forecasting influenza-like illness dynamics for military populations using a DNN.'' IEEE Big Data, 2017.
+\end{thebibliography}
+
+\end{document}\documentclass[10pt, a4paper, twocolumn]{article}
+
+% Preamble: Packages and setup
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage[margin=0.75in]{geometry}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan,
+}
+\usepackage{authblk}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{cuted} % for wide equations
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+
+% Define theorem-like environments
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{definition}{Definition}[section]
+
+% Title, Author, Date
+\title{\textbf{A Hybrid Deep Learning Framework for Spatiotemporal Epidemiological Forecasting and Optimal Control}}
+
+\author[1]{Arpit Kumar (23/ME/067)}
+\author[1]{Arya (23/ME/069)}
+\author[1]{Aditi Ajay Kumar (23/ME/023)}
+\affil[1]{Department of Mechanical Engineering, Delhi Technological University}
+
+\date{\today}
+
+\begin{document}
+
+% Title and abstract in one column
+\twocolumn[
+\begin{@twocolumnfalse}
+\maketitle
+\begin{abstract}
+Traditional compartmental models in epidemiology, such as the SEIR framework, are constrained by static parameters and fail to capture complex, nonlinear spatiotemporal patterns. This paper presents a complete, implemented hybrid deep learning framework that overcomes these limitations. The system integrates three synergistic components: (1) a \textbf{Long Short-Term Memory (LSTM)} network for temporal forecasting, (2) a \textbf{Graph Neural Network (GNN)} for capturing spatiotemporal dependencies, and (3) a \textbf{Deep Reinforcement Learning (RL)} agent for optimizing non-pharmaceutical interventions (NPIs). The RL agent operates within a simulated environment powered by the GNN-LSTM predictive engine, enabling it to learn cost-effective intervention policies. We present quantitative results demonstrating the predictive accuracy of the GNN-LSTM model and the learning progress of the RL agent on real-world COVID-19 data. By unifying predictive and prescriptive analytics in a robust, reproducible implementation, this work provides a validated blueprint for next-generation epidemic intelligence systems.
+\end{abstract}
+\vspace{0.5cm}
+\end{@twocolumnfalse}
+]
+
+% -------------------
+\section{Introduction}
+Recent pandemics have highlighted the urgent need for accurate and actionable epidemiological intelligence \cite{neil2020report}. While traditional compartmental models \cite{kermack1927contribution} have been foundational, their assumptions of homogeneous mixing and static parameters limit their real-world applicability \cite{anderson1992infectious}. Epidemics are spatiotemporal phenomena, shaped by mobility and demographic heterogeneity \cite{balcan2009multiscale}.
+
+This work addresses three key shortcomings of classical models:
+\textbf{(i) Predictive inflexibility:} We replace fixed parameters with a data-driven GNN-LSTM model.
+\textbf{(ii) Spatiotemporal blindness:} The GNN explicitly models geographic spread.
+\textbf{(iii) Prescriptive limitation:} Our Deep RL agent discovers adaptive, cost-balanced intervention strategies, a task not possible with traditional simulators.
+
+Leveraging the availability of rich, real-time data streams, our deep learning framework is designed to deliver both high-fidelity forecasts and optimized public health guidance.
+
+% -------------------
+\section{Hybrid Methodology}
+Our framework, shown in Figure \ref{fig:architecture}, consists of a predictive GNN-LSTM engine that serves as the environment for a prescriptive Deep RL agent.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\columnwidth]{model-arch.png}
+    \caption{The hybrid architecture. The GNN-LSTM predictive engine forecasts epidemic states, which are used to train the Deep RL agent to find an optimal intervention policy.}
+    \label{fig:architecture}
+\end{figure}
+
+\subsection{Module 1: GNN-LSTM Predictor}
+To capture complex spatiotemporal dynamics, we combine a Graph Neural Network (GNN) and a Long Short-Term Memory (LSTM) network.
+\begin{itemize}
+    \item \textbf{Graph Construction:} We construct a graph $\mathcal{G}=(\mathcal{V},\mathcal{E},W)$, where each node $v \in \mathcal{V}$ is a geographical region and edges $\mathcal{E}$ are defined by adjacency.
+    \item \textbf{Spatiotemporal Learning:} A GCN layer first aggregates spatial information, which is then fed into an LSTM layer to model temporal dependencies. The GCN updates node embeddings via:
+    \begin{equation}
+    H^{(l+1)} = \sigma(\hat{D}^{-1/2}\hat{W}\hat{D}^{-1/2}H^{(l)}\Theta^{(l)})
+    \end{equation}
+\end{itemize}
+
+\subsection{Module 2: RL for Optimal Control}
+We frame the intervention problem as a Markov Decision Process (MDP), solved with a Deep Q-Network (DQN) agent.
+\begin{itemize}
+    \item \textbf{MDP Definition:} $(\mathcal{S},\mathcal{A},\mathcal{P},\mathcal{R},\gamma)$ where states are epidemic features, actions are NPI levels, transitions are governed by the GNN-LSTM model, and the reward is $R(s_t,a_t) = -(w_{inf}\Delta I_t + w_{econ}C(a_t))$.
+    \item \textbf{Learning:} The agent minimizes the Bellman error using experience replay:
+    \begin{equation}
+    L(\theta) = \mathbb{E}_{(s,a,r,s')\sim\mathcal{D}}\!\left[\big(r+\gamma \max_{a'}Q(s',a';\theta^-)-Q(s,a;\theta)\big)^2\right]
+    \end{equation}
+\end{itemize}
+
+% -------------------
+\section{System Implementation}
+The framework is implemented as a complete, end-to-end pipeline driven by configuration files for full reproducibility.
+\begin{itemize}
+    \item \textbf{Data Pipeline:} Scripts automatically fetch and process raw data from Johns Hopkins University into a structured graph format.
+    \item \textbf{Reproducibility:} A `Makefile` allows for the entire workflow—from data preparation to model training and evaluation—to be run with simple commands.
+    \item \textbf{Testing \& Validation:} The implementation includes a suite of tests to ensure correctness of data shapes, graph construction, and model determinism.
+    \item \textbf{Explainability:} We integrate SHAP \cite{lundberg2017unified} to provide interpretability for both the predictive and prescriptive models, allowing insights into the key drivers of forecasts and policy decisions.
+\end{itemize}
+
+% -------------------
+\section{Results and Analysis}
+We trained and evaluated the framework on the JHU COVID-19 dataset.
+
+\subsection{Predictive Model Performance}
+The GNN-LSTM model was trained for 5 epochs on the full dataset. The training and validation loss curves in Figure \ref{fig:loss} show effective learning and generalization. The final validation mean squared error was **0.036**, demonstrating high predictive accuracy. Figure \ref{fig:preds} shows the model's forecasts for Delhi closely tracking the ground truth.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\columnwidth]{assets/lstm-loss.png}
+    \caption{Training and validation loss for the GNN-LSTM model over 5 epochs, showing rapid convergence.}
+    \label{fig:loss}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\columnwidth]{assets/lstm-result.png}
+    \caption{Model predictions for confirmed cases in Delhi vs. actual data.}
+    \label{fig:preds}
+\end{figure}
+
+\subsection{RL Agent Performance}
+The DQN agent was trained for 5 episodes using the GNN-LSTM as its environment. The agent's performance is summarized in Figure \ref{fig:rl}.
+\begin{itemize}
+    \item \textbf{Learning Progression:} The mean return improved from -14.9 to -14.1, indicating that the agent successfully learned to select actions that led to better outcomes (lower costs).
+    \item \textbf{Policy Stability:} The agent learned a stable policy, reducing the number of intervention switches per episode, which is desirable for real-world application.
+\end{itemize}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\columnwidth]{assets/RL-result.png}
+    \caption{RL agent training progress, showing the cumulative reward per episode and the stability of the learned policy.}
+    \label{fig:rl}
+\end{figure}
+
+% -------------------
+\section{Ethical Considerations}
+The use of such a system requires careful consideration of data privacy (using only anonymized, aggregated data), algorithmic fairness (ensuring reward functions do not disproportionately burden vulnerable groups), and the need for human oversight. Our inclusion of explainability tools like SHAP is a step towards transparent and trustworthy AI in public health.
+
+% -------------------
+\section{Conclusion}
+We have developed and validated a hybrid deep learning framework for epidemiological forecasting and control. By integrating a GNN-LSTM predictor with a Deep RL agent in a robust and reproducible pipeline, we demonstrate a powerful approach that moves beyond traditional models. The strong quantitative results on real-world data confirm the viability of this system as a blueprint for future epidemic intelligence platforms.
+
+% -------------------
+\bibliographystyle{plain}
+\begin{thebibliography}{99}
+\bibitem{anderson1992infectious} R. M. Anderson and R. M. May. \textit{Infectious Diseases of Humans: Dynamics and Control}. OUP, 1992.
+\bibitem{balcan2009multiscale} D. Balcan et al. ``Multiscale mobility networks and the spatial spreading of infectious diseases.'' \textit{PNAS}, 2009.
+\bibitem{benvenuto2020application} D. Benvenuto et al. ``Application of the ARIMA model on the COVID-2019 epidemic dataset.'' \textit{Data in Brief}, 2020.
+\bibitem{chimmula2020time} V. K. R. Chimmula and L. Zhang. ``Time series forecasting of COVID-19 transmission in Canada using LSTM networks.'' \textit{Chaos, Solitons \& Fractals}, 2020.
+\bibitem{cho2014learning} K. Cho et al. ``Learning phrase representations using RNN encoder-decoder for statistical machine translation.'' arXiv:1406.1078, 2014.
+\bibitem{colizza2008epidemic} V. Colizza and A. Vespignani. ``Epidemic modeling in metapopulation systems.'' \textit{J. Theor. Biol.}, 2008.
+\bibitem{he2020st} S. He et al. ``ST-graph: A spatio-temporal graph-based model for COVID-19 forecasting.'' \textit{IEEE JBHI}, 2020.
+\bibitem{hochreiter1997long} S. Hochreiter and J. Schmidhuber. ``Long short-term memory.'' \textit{Neural Computation}, 1997.
+\bibitem{kapoor2020examining} A. Kapoor et al. ``Spatiotemporal GNN for COVID-19 forecasting.'' NeurIPS ML4PH Workshop, 2020.
+\bibitem{kermack1927contribution} W. O. Kermack and A. G. McKendrick. ``A contribution to the mathematical theory of epidemics.'' \textit{Proc. R. Soc. Lond.}, 1927.
+\bibitem{khadilkar2021can} H. Khadilkar and A. A. Diwan. ``Can we learn to control an epidemic? A deep RL approach.'' AAMAS, 2021.
+\bibitem{kipf2016semi} T. N. Kipf and M. Welling. ``Semi-supervised classification with GCNs.'' arXiv:1609.02907, 2016.
+\bibitem{lecun2015deep} Y. LeCun, Y. Bengio, and G. Hinton. ``Deep learning.'' \textit{Nature}, 2015.
+\bibitem{lundberg2017unified} S. Lundberg and S.-I. Lee. ``A unified approach to interpreting model predictions.'' NeurIPS, 2017.
+\bibitem{mnih2015human} V. Mnih et al. ``Human-level control through deep reinforcement learning.'' \textit{Nature}, 2015.
+\bibitem{neil2020report} N. M. Ferguson et al. ``Report 9: Impact of NPIs to reduce COVID-19 mortality.'' Imperial College London, 2020.
+\bibitem{panagopoulos2021spatio} M. A. Panagopoulos et al. ``Spatio-temporal GNN for COVID-19 prediction.'' \textit{Sci. Reports}, 2021.
+\bibitem{probert2016optimizing} W. J. M. Probert et al. ``Optimizing vaccination strategies: a reinforcement learning approach.'' \textit{Epidemics}, 2016.
+\bibitem{velivckovic2017graph} P. Veličković et al. ``Graph attention networks.'' arXiv:1710.10903, 2017.
+\bibitem{volkova2017forecasting} S. Volkova et al. ``Forecasting influenza-like illness dynamics for military populations using a DNN.'' IEEE Big Data, 2017.
+\end{thebibliography}
+
+\end{document}
